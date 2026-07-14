@@ -13,6 +13,14 @@ jobs:
         steps:
             - uses: actions/checkout@v4
 
+            - name: Set up Deno
+              uses: denoland/setup-deno@v2
+              with:
+                  deno-version: v2.x
+
+            - name: Build frontend
+              run: deno task setup
+
             - name: Set lowercase image name
               id: vars
               run: echo "image=ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
