@@ -5,6 +5,9 @@ import { AudioData, AudioDataSchema, ConfigJSON, ConfigJSONSchema, SyncRequest, 
 import { kv } from "./db.ts";
 import sanitize from "sanitize-filename";
 import { supportedAudioFormatList, supportedFormatList } from "./common.ts";
+import { parseChordsText } from "./chords.ts";
+
+const chordsFilename = "chords.txt";
 
 const updateQueues = new Map<string, Promise<ConfigJSON>>();
 
@@ -160,6 +163,7 @@ export async function createTab(tabFileData: Uint8Array, ext: string, title: str
         tab,
         audio: [],
         youtube: [],
+        chords: null,
     };
 
     await writeConfigJSON(id.toString(), info);
@@ -225,6 +229,7 @@ export async function getOrCreateTab(id: string): Promise<TabInfo | null> {
         tab,
         audio: [],
         youtube: [],
+        chords: null,
     };
 
     await writeConfigJSON(id, newConfig);
@@ -390,6 +395,49 @@ export async function removeAudio(tab: TabInfo, filename: string) {
     // Remove metadata from config.json if exists
     await updateConfigJSON(tab.id, async (config) => {
         config.audio = config.audio.filter((a: AudioData) => a.filename !== filename);
+    });
+}
+
+function getChordsFilePath(tab: TabInfo): string {
+    return path.join(tabDir, tab.id.toString(), chordsFilename);
+}
+
+/**
+ * Save the raw chords TXT (as a sibling file, source of truth) and cache the
+ * parsed result in config.json.
+ */
+export async function setChords(tab: TabInfo, rawText: string) {
+    const filePath = getChordsFilePath(tab);
+    await Deno.writeTextFile(filePath, rawText);
+
+    const chords = parseChordsText(rawText);
+
+    await updateConfigJSON(tab.id, async (config) => {
+        config.chords = chords;
+    });
+
+    return chords;
+}
+
+/**
+ * Get the raw chords TXT for a tab, if it exists.
+ */
+export async function getChordsText(tab: TabInfo): Promise<string | null> {
+    const filePath = getChordsFilePath(tab);
+    if (!await fs.exists(filePath)) {
+        return null;
+    }
+    return await Deno.readTextFile(filePath);
+}
+
+export async function removeChords(tab: TabInfo) {
+    const filePath = getChordsFilePath(tab);
+    if (await fs.exists(filePath)) {
+        await Deno.remove(filePath);
+    }
+
+    await updateConfigJSON(tab.id, async (config) => {
+        config.chords = null;
     });
 }
 

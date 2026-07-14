@@ -5,12 +5,13 @@ import { notify } from "@kyvg/vue3-notification";
 import Vue3Dropzone from "@jaxtheprime/vue3-dropzone";
 import { supportedAudioFormatCommaString, supportedFormatCommaString } from "../../../backend/common.js";
 import SyncOptions from "../components/SyncOptions.vue";
+import ChordsView from "../components/ChordsView.vue";
 import { FontAwesomeIcon } from "../icon.ts";
 
 const alphaTab = await import("@coderline/alphatab");
 
 export default defineComponent({
-    components: { SyncOptions, Vue3Dropzone, FontAwesomeIcon },
+    components: { SyncOptions, Vue3Dropzone, FontAwesomeIcon, ChordsView },
     data() {
         return {
             tabID: -1,
@@ -28,6 +29,9 @@ export default defineComponent({
             isLoading: true,
             isUploading: false,
             showOpenButtons: false,
+            chordsText: "",
+            chordsPreview: null,
+            isImportingChords: false,
         };
     },
     async mounted() {
@@ -56,6 +60,8 @@ export default defineComponent({
                 this.audioList = data.audioList;
                 this.filePath = data.filePath;
                 this.showOpenButtons = data.showOpenButtons;
+                this.chordsText = data.chordsRaw || "";
+                this.chordsPreview = data.chords;
             } finally {
                 this.isLoading = false;
             }
@@ -313,6 +319,70 @@ export default defineComponent({
             }
         },
 
+        async onChordsFileSelected(event) {
+            const file = event.target.files?.[0];
+            if (!file) {
+                return;
+            }
+            this.chordsText = await file.text();
+            event.target.value = "";
+        },
+
+        async importChords() {
+            this.isImportingChords = true;
+            try {
+                if (!this.chordsText.trim()) {
+                    throw new Error("Please paste or upload chords text first");
+                }
+
+                const res = await fetch(baseURL + `/api/tab/${this.tabID}/chords`, {
+                    method: "POST",
+                    credentials: "include",
+                    headers: {
+                        "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({ text: this.chordsText }),
+                });
+
+                await checkFetch(res);
+                const data = await res.json();
+                this.chordsPreview = data.chords;
+
+                notify({
+                    text: "Chords imported successfully",
+                    type: "success",
+                });
+            } catch (e) {
+                generalError(e);
+            } finally {
+                this.isImportingChords = false;
+            }
+        },
+
+        async removeChords() {
+            try {
+                if (!confirm("Are you sure you want to remove the imported chords?")) {
+                    return;
+                }
+
+                const res = await fetch(baseURL + `/api/tab/${this.tabID}/chords`, {
+                    method: "DELETE",
+                    credentials: "include",
+                });
+
+                await checkFetch(res);
+                this.chordsText = "";
+                this.chordsPreview = null;
+
+                notify({
+                    text: "Chords removed successfully",
+                    type: "success",
+                });
+            } catch (e) {
+                generalError(e);
+            }
+        },
+
         dropzoneError(err) {
             console.log(err);
             let error = err.type;
@@ -383,6 +453,7 @@ export default defineComponent({
                 <router-link :to="`/tab/${tab.id}/edit/info`" class="btn btn-secondary">Info</router-link>
                 <router-link :to="`/tab/${tab.id}/edit/audio`" class="btn btn-secondary">Youtube & Audio files</router-link>
                 <router-link :to="`/tab/${tab.id}/edit/tab-file`" class="btn btn-secondary">Tab file</router-link>
+                <router-link :to="`/tab/${tab.id}/edit/chords`" class="btn btn-secondary">Chords</router-link>
             </div>
         </div>
 
@@ -556,6 +627,49 @@ export default defineComponent({
             >
                 {{ isUploading ? "Uploading..." : "Upload" }}
             </button>
+        </div>
+
+        <!-- Chords Page -->
+        <div v-else-if='this.page === "chords"' class="mb-5">
+            <h2 class="mt-4 mb-4">Import Chords</h2>
+            <p>
+                Paste chords text copied from a site like Cifra Club (chord line above the lyric line, followed by a
+                <code>----- Acordes -----</code> section with chord diagrams), or upload a <code>.txt</code> file.
+            </p>
+
+            <div class="mb-3">
+                <input type="file" accept=".txt" class="form-control" @change="onChordsFileSelected">
+            </div>
+
+            <textarea
+                class="form-control mb-3"
+                rows="16"
+                v-model="chordsText"
+                placeholder="Paste your chords TXT here..."
+            ></textarea>
+
+            <div class="d-flex gap-2 mb-4">
+                <button
+                    @click="importChords"
+                    class="btn btn-primary"
+                    :disabled="isImportingChords"
+                >
+                    {{ isImportingChords ? "Importing..." : "Import" }}
+                </button>
+
+                <button
+                    v-if="chordsPreview"
+                    @click="removeChords"
+                    class="btn btn-danger"
+                >
+                    Remove chords
+                </button>
+            </div>
+
+            <div v-if="chordsPreview">
+                <h3 class="mb-3">Preview</h3>
+                <ChordsView :chordsData="chordsPreview" readOnly />
+            </div>
         </div>
     </div>
 </template>

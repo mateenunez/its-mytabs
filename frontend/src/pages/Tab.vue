@@ -6,6 +6,7 @@ import { notify } from "@kyvg/vue3-notification";
 import { FontAwesomeIcon } from "@fortawesome/vue-fontawesome";
 import { isLoggedIn } from "../auth-client.js";
 import { getKeySignature } from "../util.ts";
+import ChordsView from "../components/ChordsView.vue";
 
 const alphaTab = await import("@coderline/alphatab");
 const { ScrollMode, StaveProfile } = alphaTab;
@@ -31,7 +32,7 @@ export default defineComponent({
 
     youtubePlayer: null,
 
-    components: { FontAwesomeIcon, BDropdownDivider, BDropdownItem, BDropdown },
+    components: { FontAwesomeIcon, BDropdownDivider, BDropdownItem, BDropdown, ChordsView },
     emits: ["setFixedHeader"],
     data() {
         return {
@@ -61,6 +62,8 @@ export default defineComponent({
             scrollMode: ScrollMode.Continuous,
             keySignature: "",
             playbackRange: null,
+            chords: null,
+            viewMode: "tab",
 
             keyEvents: (e) => {
                 // Do not handle these tagName, because the only input is sync point, it is weird when play space to test the sync point
@@ -335,6 +338,11 @@ export default defineComponent({
                 this.setConfig("audio", audioParam);
             }
 
+            // Show the Chords view if requested in URL
+            if (urlParams.get("view") === "chords") {
+                this.viewMode = "chords";
+            }
+
             const trackID = this.getConfig("trackID", 0);
 
             // Load the AlphaTab
@@ -417,6 +425,7 @@ export default defineComponent({
                 this.tab = data.tab;
                 this.youtubeList = data.youtubeList;
                 this.audioList = data.audioList;
+                this.chords = data.chords;
             }
 
             const tempToken = await this.getTempToken();
@@ -425,6 +434,27 @@ export default defineComponent({
             trackID = await this.initContainer(tempToken, trackID);
 
             this.setConfig("trackID", trackID);
+        },
+
+        setView(mode) {
+            if (mode === this.viewMode) {
+                return;
+            }
+
+            this.viewMode = mode;
+
+            // Avoid overlapping audio between the tab player and the Chords view's YouTube player
+            if (mode === "chords") {
+                this.pause();
+            }
+
+            const query = { ...this.$route.query };
+            if (mode === "chords") {
+                query.view = "chords";
+            } else {
+                delete query.view;
+            }
+            this.$router.replace({ query });
         },
 
         countIn() {
@@ -1456,9 +1486,25 @@ export default defineComponent({
     <div class="main" :class='{ "light": this.setting.scoreColor === "light" }'>
         <h1>{{ tab.title }}</h1>
         <h2>{{ tab.artist }}</h2>
-        <div class="key-signature badge bg-secondary" v-if="keySignature && setting.showKeySignature">
+
+        <div class="view-toggle">
+            <button class="btn btn-sm btn-secondary" :class="{ active: viewMode === 'tab' }" @click="setView('tab')">Tabs</button>
+            <button class="btn btn-sm btn-secondary" :class="{ active: viewMode === 'chords' }" @click="setView('chords')">Chords</button>
+        </div>
+
+        <div class="key-signature badge bg-secondary" v-if="viewMode === 'tab' && keySignature && setting.showKeySignature">
             {{ keySignature }}
         </div>
+
+        <ChordsView
+            v-if="viewMode === 'chords'"
+            :chordsData="chords"
+            :youtubeList="youtubeList"
+            :tabID="tabID"
+            :isLoggedIn="isLoggedIn"
+        />
+
+        <div v-show="viewMode === 'tab'">
         <div ref="bassTabContainer" v-pre></div>
 
         <!-- Just add a margin, don't let youtube player overlay the tab -->
@@ -1584,6 +1630,7 @@ export default defineComponent({
                 <!-- Audio Player -->
                 <audio ref="audioPlayer" class="player" controls v-show='currentAudio.startsWith("audio-")' hidden></audio>
             </div>
+        </div>
         </div>
     </div>
 </template>
@@ -1716,6 +1763,13 @@ h1 {
 h2 {
     text-align: center;
     margin-bottom: 0;
+}
+
+.view-toggle {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    margin: 15px auto;
 }
 
 $color: #32393e;

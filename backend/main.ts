@@ -2,7 +2,7 @@ import { serve, ServerType } from "@hono/node-server";
 import { Context, Hono } from "@hono/hono";
 import * as fs from "@std/fs";
 import { auth, checkLogin, getCurrentSession, isFinishSetup, isLoggedIn } from "./auth.ts";
-import { SignUpSchema, SyncRequestSchema, UpdateTabFavSchema, UpdateTabInfoSchema, YoutubeAddDataSchema } from "./zod.ts";
+import { ImportChordsSchema, SignUpSchema, SyncRequestSchema, UpdateTabFavSchema, UpdateTabInfoSchema, YoutubeAddDataSchema } from "./zod.ts";
 import { db, hasUser, isInitDB, kv, migrate } from "./db.ts";
 import { cors } from "@hono/hono/cors";
 import { serveStatic } from "@hono/hono/deno";
@@ -17,14 +17,17 @@ import {
     deleteTab,
     fixMissingTab,
     getAllTabs,
+    getChordsText,
     getConfigJSON,
     getTab,
     getTabFilePath,
     getTabFolderPath,
     getTabFullFilePath,
     removeAudio,
+    removeChords,
     removeYoutube,
     replaceTab,
+    setChords,
     updateAudio,
     updateConfigJSON,
     updateTab,
@@ -266,6 +269,7 @@ export async function main() {
             config = await fixMissingTab(config);
 
             const filePath = (await isLoggedIn(c)) ? getTabFullFilePath(config.tab) : "";
+            const chordsRaw = (await isLoggedIn(c)) ? await getChordsText(config.tab) : null;
 
             return c.json({
                 ok: true,
@@ -273,6 +277,8 @@ export async function main() {
                 tab: config.tab,
                 youtubeList: config.youtube,
                 audioList: config.audio,
+                chords: config.chords,
+                chordsRaw,
                 filePath,
             });
         } catch (e) {
@@ -540,6 +546,44 @@ export async function main() {
 
             await checkTabExists(id);
             await removeYoutube(id, videoID);
+
+            return c.json({
+                ok: true,
+            });
+        } catch (e) {
+            return generalError(c, e);
+        }
+    });
+
+    // Import/replace Chords (POST /api/tab/${tabID}/chords)
+    app.post("/api/tab/:id/chords", async (c) => {
+        try {
+            await checkLogin(c);
+            const id = c.req.param("id");
+
+            const body = await c.req.json();
+            const data = ImportChordsSchema.parse(body);
+
+            const tab = await getTab(id);
+            const chords = await setChords(tab, data.text);
+
+            return c.json({
+                ok: true,
+                chords,
+            });
+        } catch (e) {
+            return generalError(c, e);
+        }
+    });
+
+    // Remove Chords (DELETE /api/tab/${tabID}/chords)
+    app.delete("/api/tab/:id/chords", async (c) => {
+        try {
+            await checkLogin(c);
+            const id = c.req.param("id");
+
+            const tab = await getTab(id);
+            await removeChords(tab);
 
             return c.json({
                 ok: true,

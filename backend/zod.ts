@@ -70,9 +70,34 @@ export const AudioDataSchema = z.object({
 
 export type AudioData = z.infer<typeof AudioDataSchema>;
 
+export const ChordSchema = z.object({
+    symbol: z.string(),
+    column: z.number(),
+});
+export type Chord = z.infer<typeof ChordSchema>;
+
+export const ChordLineSchema = z.object({
+    lyric: z.string(),
+    chords: z.array(ChordSchema).default([]),
+});
+export type ChordLine = z.infer<typeof ChordLineSchema>;
+
+export const ChordsDataSchema = z.object({
+    lines: z.array(ChordLineSchema).default([]),
+    // Fret per string, -1 = muted ("X")
+    chordDefs: z.record(z.string(), z.array(z.number())).default({}),
+});
+export type ChordsData = z.infer<typeof ChordsDataSchema>;
+
+export const ImportChordsSchema = z.object({
+    text: z.string(),
+});
+export type ImportChords = z.infer<typeof ImportChordsSchema>;
+
 export const ConfigJSONSchema = z.object({
     tab: TabInfoSchema,
     audio: z.array(AudioDataSchema).default([]),
     youtube: z.array(YoutubeSchema).default([]),
+    chords: ChordsDataSchema.nullable().default(null),
 });
 export type ConfigJSON = z.infer<typeof ConfigJSONSchema>;

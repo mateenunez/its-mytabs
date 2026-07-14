@@ -189,6 +189,59 @@ Deno.test({
         });
         assertEquals(resFile.status, 200);
         await resFile.body?.cancel();
+
+        // Chords: import requires auth
+        const chordsText = "G\nHello world\n\n----- Acordes -----\nG = 3 2 0 0 0 3";
+        const resNoAuth = await fetch(`${baseURL}/api/tab/${encodeURIComponent(id)}/chords`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ text: chordsText }),
+        });
+        assertEquals(resNoAuth.status, 400);
+
+        // Import with auth
+        const resImport = await fetch(`${baseURL}/api/tab/${encodeURIComponent(id)}/chords`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Cookie: cookiePair },
+            body: JSON.stringify({ text: chordsText }),
+        });
+        assertEquals(resImport.status, 200);
+        const importJson = await resImport.json();
+        assertEquals(importJson.ok, true);
+        assertEquals(importJson.chords.chordDefs, { G: [3, 2, 0, 0, 0, 3] });
+        assertEquals(importJson.chords.lines, [
+            { lyric: "Hello world", chords: [{ symbol: "G", column: 0 }] },
+        ]);
+
+        // GET tab now includes the parsed chords + raw text (for the logged-in owner)
+        const resTabWithChords = await fetch(`${baseURL}/api/tab/${encodeURIComponent(id)}`, {
+            method: "GET",
+            headers: { Cookie: cookiePair },
+        });
+        const tabWithChordsJson = await resTabWithChords.json();
+        assertEquals(tabWithChordsJson.chords.chordDefs, { G: [3, 2, 0, 0, 0, 3] });
+        assertEquals(tabWithChordsJson.chordsRaw, chordsText);
+
+        // Remove requires auth
+        const resRemoveNoAuth = await fetch(`${baseURL}/api/tab/${encodeURIComponent(id)}/chords`, {
+            method: "DELETE",
+        });
+        assertEquals(resRemoveNoAuth.status, 400);
+
+        // Remove with auth
+        const resRemove = await fetch(`${baseURL}/api/tab/${encodeURIComponent(id)}/chords`, {
+            method: "DELETE",
+            headers: { Cookie: cookiePair },
+        });
+        assertEquals(resRemove.status, 200);
+
+        const resTabAfterRemove = await fetch(`${baseURL}/api/tab/${encodeURIComponent(id)}`, {
+            method: "GET",
+            headers: { Cookie: cookiePair },
+        });
+        const tabAfterRemoveJson = await resTabAfterRemove.json();
+        assertEquals(tabAfterRemoveJson.chords, null);
+        assertEquals(tabAfterRemoveJson.chordsRaw, null);
     },
 });
 

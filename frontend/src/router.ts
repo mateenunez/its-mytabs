@@ -38,6 +38,10 @@ const routes: RouteRecordRaw[] = [
                         component: TabConfig,
                     },
                     {
+                        path: "/tab/:id/edit/chords",
+                        component: TabConfig,
+                    },
+                    {
                         name: "tabNew",
                         path: "/new-tab",
                         component: TabNew,
