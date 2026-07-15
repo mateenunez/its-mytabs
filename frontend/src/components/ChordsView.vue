@@ -251,6 +251,7 @@ export default defineComponent({
         startManualScrollLoop() {
             this._lastTs = null;
             this._scrollAccum = this.$refs.scrollContainer?.scrollTop ?? 0;
+            this._lastSetScrollTop = this._scrollAccum;
 
             const step = (ts) => {
                 if (!this.scrolling) {
@@ -259,6 +260,13 @@ export default defineComponent({
 
                 const el = this.$refs.scrollContainer;
                 if (el) {
+                    // If scrollTop moved on its own since the last frame, the user
+                    // scrolled it manually (wheel/trackpad/touch) - pick up from
+                    // there instead of snapping back and blocking their input.
+                    if (this._lastSetScrollTop !== null && Math.abs(el.scrollTop - this._lastSetScrollTop) > 0.5) {
+                        this._scrollAccum = el.scrollTop;
+                    }
+
                     if (this._lastTs !== null) {
                         const dt = (ts - this._lastTs) / 1000;
                         // Accumulate fractional pixels ourselves: el.scrollTop rounds to
@@ -266,6 +274,7 @@ export default defineComponent({
                         // would otherwise be discarded and the element would never move.
                         this._scrollAccum += this.speed * dt;
                         el.scrollTop = this._scrollAccum;
+                        this._lastSetScrollTop = el.scrollTop;
                     }
 
                     if (el.scrollTop + el.clientHeight >= el.scrollHeight - 1) {
